@@ -126,7 +126,7 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 - **Root Password**: whatever the `ROOT_PASSWORD` repository secret is set to
 - **Locale**: `en_US.UTF-8`
 - **Keymap**: `us-acentos`
-- **Timezone**: chosen when the workflow is run (defaults to `America/Los_Angeles`)
+- **Timezone**: `America/Los_Angeles` (set `OS_TIMEZONE` to change it)
 
 ### Network Configuration
 - **Wired**: DHCP enabled on all Ethernet interfaces
@@ -157,7 +157,7 @@ env:
     base base-devel git neovim ...
   OS_DEFAULT_LOCALE: en_US.UTF-8   # System locale
   OS_KEYMAP: us-acentos            # Console keymap
-  OS_TIMEZONE: America/Los_Angeles # System timezone (a workflow input)
+  OS_TIMEZONE: America/Los_Angeles # System timezone
   SSH_PUB_KEY_URLS: https://github.com/username.keys  # SSH public keys
 ```
 

@@ -34,7 +34,7 @@ IMAGE_NAME_PREFIX="${IMAGE_NAME_PREFIX:-archlinux-rpi}"
 BOOT_PARTITION_SIZE="${BOOT_PARTITION_SIZE:-512M}"
 
 # System Configuration
-OS_TIMEZONE="${OS_TIMEZONE:-Europe/Paris}"
+OS_TIMEZONE="${OS_TIMEZONE:-America/Los_Angeles}"
 OS_DEFAULT_LOCALE="${OS_DEFAULT_LOCALE:-en_US.UTF-8}"
 OS_KEYMAP="${OS_KEYMAP:-us-acentos}"
 OS_LOCALES="${OS_LOCALES:-en_US.UTF-8 UTF-8
@@ -462,6 +462,13 @@ configure_locales() {
 
 configure_timezone() {
     log_info "Configuring timezone: $OS_TIMEZONE..."
+
+    # ln -sf writes the link whether or not the target exists, so a misspelt
+    # zone produced a dangling /etc/localtime and a machine that quietly ran on
+    # UTC. On a Pi, which has no RTC and starts every boot with a wrong clock
+    # anyway, that is the last thing that should fail silently.
+    [[ -e "$MOUNT_DIR/usr/share/zoneinfo/$OS_TIMEZONE" ]] ||
+        die "No such timezone: $OS_TIMEZONE (expected a /usr/share/zoneinfo name, e.g. America/Los_Angeles)"
 
     ln -sf "/usr/share/zoneinfo/$OS_TIMEZONE" "$MOUNT_DIR/etc/localtime"
 
