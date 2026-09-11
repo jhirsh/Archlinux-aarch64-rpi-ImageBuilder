@@ -22,8 +22,7 @@ Automated builder for custom Arch Linux ARM images for Raspberry Pi 4 and 5, wit
 2. Go to **Actions** → **Build Archlinux aarch64 Raspberry Pi Image**
 3. Click **Run workflow**
 4. Select Raspberry Pi model (4 or 5)
-5. Optionally enable S3 upload
-6. Download the compressed `.img.zst` file from workflow artifacts
+5. Download the `.img.zst` from the `rpi5-latest` (or `rpi4-latest`) release
 
 #### Option 2: Local Build with Act
 
@@ -276,7 +275,6 @@ The automated build process:
 
 ### For GitHub Actions Build
 - GitHub account with Actions enabled
-- Optional: S3-compatible storage credentials for artifact uploads
 
 ### For Local Build with Act
 - Docker or Podman
