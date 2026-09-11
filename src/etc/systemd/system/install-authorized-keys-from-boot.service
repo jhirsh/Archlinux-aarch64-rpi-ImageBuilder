@@ -1,0 +1,19 @@
+[Unit]
+Description=Install root's authorized_keys from the boot partition
+# Only when there is something to read. Adding the file to the card later and
+# rebooting works exactly the same way as doing it before the first boot.
+ConditionPathExists=/boot/authorized_keys
+# /boot is a separate FAT32 partition mounted from fstab, so the file is not
+# readable yet in early boot.
+RequiresMountsFor=/boot
+Before=sshd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/install-authorized-keys-from-boot
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

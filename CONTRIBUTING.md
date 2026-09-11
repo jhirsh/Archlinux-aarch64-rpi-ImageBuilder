@@ -37,18 +37,19 @@ through [act](https://github.com/nektos/act).
 
 These are configuration for one person's machine, not defaults to improve:
 
-- `SSH_PUB_KEY_URLS` in the workflow names the keys that get root on every
-  image built here. A fork of this fork must change it, or it grants root to
-  someone else.
 - `OS_TIMEZONE` is set for where the cards get used. Nothing in the build can
   detect that — the runner is always UTC and the Pi has no clock.
 
 ## Security
 
 The image is published, so treat anything written into it as public. In
-particular, never add a credential at build time: `root` and `alarm` ship
-locked deliberately, and a password is set per card on first boot from a file
-on the boot partition. Do not set the `WIFI_SSID` / `WIFI_PASSWORD` secrets
+particular, never add a credential at build time. `SSH_PUB_KEY_URLS` is empty
+and must stay empty here: a key baked into a published image is a key every
+person who flashes it grants root to, whoever ran the build. `root` and
+`alarm` ship locked for the same reason. Both the key and the password are
+provisioned per card, on first boot, from files on its boot partition.
+
+Do not set the `WIFI_SSID` / `WIFI_PASSWORD` secrets
 while this repository is public — the PSK would be baked into a downloadable
 image.
 

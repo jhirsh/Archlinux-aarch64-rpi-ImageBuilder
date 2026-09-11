@@ -30,10 +30,17 @@ env:
   # always UTC and the Pi has no clock. This fork builds for one place, so it
   # is stated once here. Override OS_TIMEZONE for a one-off build elsewhere.
   OS_TIMEZONE: America/Los_Angeles
-  # Whoever is listed here gets root over SSH on every machine flashed with
-  # the result. Upstream lists its own maintainers; a fork that leaves that
-  # alone is handing root on its Pi to two strangers.
-  SSH_PUB_KEY_URLS: https://github.com/jhirsh.keys
+  # Deliberately unset, and it should stay that way while this repository is
+  # public. A key baked in here is a key that every person who flashes the
+  # published image grants root to -- whoever ran the build. Upstream's images
+  # authorize its maintainers for exactly this reason, and doing the same with
+  # a different name on it would be no better.
+  #
+  # install-authorized-keys-from-boot reads authorized_keys off the card's
+  # boot partition on first boot instead, so whoever writes the card is the
+  # only one who gets in. Set SSH_PUB_KEY_URLS only for a private build of an
+  # image nobody else will flash.
+  SSH_PUB_KEY_URLS: ""
   # Optional: Override via repository variables or secrets
   WIFI_SSID: ${{ secrets.WIFI_SSID }}
   WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
@@ -130,7 +137,7 @@ jobs:
           gh release view "$tag" >/dev/null 2>&1 ||
             gh release create "$tag" \
               --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
-              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 22 and password authentication is off. No password ships in the image: to get a console login, write one line to a file called rootpw on the card's boot partition before first boot. The root filesystem expands to fill the card on first boot."
+              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 22 and password authentication is off. The image contains no credentials at all, so provision the card before booting it: copy your public key to authorized_keys on its FAT boot partition for SSH, and/or write a password to rootpw there for a console login. The root filesystem expands to fill the card on first boot."
           gh release upload "$tag" "$IMAGE_FILE" --clobber
           echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 
