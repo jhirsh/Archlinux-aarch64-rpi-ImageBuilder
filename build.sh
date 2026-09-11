@@ -414,6 +414,22 @@ remove_old_packages() {
     log_success "Old packages removed"
 }
 
+configure_initramfs() {
+    log_info "Configuring mkinitcpio for a machine other than the build host..."
+
+    # mkinitcpio's autodetect hook keeps only the modules for the hardware it
+    # is running on. Here that is the x86 CI runner, so the published image
+    # once shipped an initramfs whose only drivers were an Azure VM's SATA
+    # controller, and the Pi booted to a blank screen. Without autodetect the
+    # kms/block/filesystems hooks include everything they know about, which
+    # is the only correct answer when the build host is not the target.
+    sed -i 's/autodetect //' "$MOUNT_DIR/etc/mkinitcpio.conf"
+    grep -q 'autodetect' "$MOUNT_DIR/etc/mkinitcpio.conf" &&
+        die "autodetect is still in /etc/mkinitcpio.conf"
+
+    log_success "autodetect removed from the mkinitcpio hooks"
+}
+
 install_kernel() {
     log_info "Installing Raspberry Pi kernel..."
 
@@ -428,6 +444,11 @@ install_kernel() {
     else
         die "Unsupported RPI_MODEL: $RPI_MODEL (must be 4 or 5)"
     fi
+
+    # The one check that would have caught the autodetect bug: the display
+    # driver is a module the Pi needs and the build host never has.
+    arch-chroot "$MOUNT_DIR" lsinitcpio /boot/initramfs-linux.img | grep -q 'vc4\.ko' ||
+        die "initramfs has no vc4 module; it was built for the wrong machine"
 
     log_success "Kernel installed"
 }
@@ -565,6 +586,16 @@ configure_fstab() {
     log_info "Configuring fstab..."
 
     echo "LABEL=RPI64-BOOT  /boot   vfat    defaults        0       0" > "$MOUNT_DIR/etc/fstab"
+
+    # The kernel package hardcodes root=/dev/mmcblk0p2, which only exists on
+    # an SD card. PARTUUID names this image's own second partition wherever
+    # it was written, and the kernel resolves it without an initramfs.
+    local disk_id
+    disk_id=$(blkid -s PTUUID -o value "$LOOP_DEVICE") ||
+        die "Could not read the disk identifier of $LOOP_DEVICE"
+    sed -i "s#root=/dev/mmcblk0p2#root=PARTUUID=${disk_id}-02#" "$MOUNT_DIR/boot/cmdline.txt"
+    grep -q "root=PARTUUID=${disk_id}-02" "$MOUNT_DIR/boot/cmdline.txt" ||
+        die "cmdline.txt does not name root by PARTUUID"
 
     log_success "Fstab configured"
 }
@@ -904,6 +935,7 @@ main() {
     clean_uboot
     init_pacman
     remove_old_packages
+    configure_initramfs
     install_kernel
     install_packages
     configure_locales
