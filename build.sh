@@ -62,7 +62,7 @@ ZT_NETWORK_ID="${ZT_NETWORK_ID:-}"
 OS_PACKAGES="${OS_PACKAGES:-base base-devel dosfstools git mkinitcpio-utils neovim nftables openssh python qrencode rsync sudo tailscale uboot-tools unzip zerotier-one zsh iwd wireless-regdb linux-firmware crda raspberrypi-bootloader firmware-raspberrypi zstd}"
 
 # Build dependencies
-BUILD_DEPS="${BUILD_DEPS:-qemu-user-static-binfmt qemu-user-static dosfstools wget libarchive arch-install-scripts parted tree fping git s3cmd zstd}"
+BUILD_DEPS="${BUILD_DEPS:-qemu-user-static-binfmt qemu-user-static dosfstools wget libarchive arch-install-scripts parted tree fping git zstd}"
 
 # Download URLs
 ARCH_AARCH64_MIRROR="${ARCH_AARCH64_MIRROR:-http://os.archlinuxarm.org/os}"
@@ -79,7 +79,9 @@ OUTPUT_DIR="${OUTPUT_DIR:-$WORKDIR}"
 # Runtime variables (set during build)
 LOOP_DEVICE=""
 BUILD_DATE=$(date +%Y%m%d)
-SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
+# actions/checkout in a container without git downloads a tarball with no
+# .git, so fall back to the SHA the workflow already knows before giving up.
+SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || { s="${GITHUB_SHA:-local}"; echo "${s:0:7}"; })
 RPI_HOSTNAME="${RPI_HOSTNAME:-archlinux-${SHORT_SHA}-rpi${RPI_MODEL}}"
 IMAGE_NAME="${IMAGE_NAME_PREFIX}-${ARM_VERSION}-rpi${RPI_MODEL}_v${SHORT_SHA}_${BUILD_DATE}.img"
 

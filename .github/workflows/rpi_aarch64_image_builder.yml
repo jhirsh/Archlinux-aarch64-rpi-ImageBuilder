@@ -11,11 +11,6 @@ on:
         options:
           - '4'
           - '5'
-      upload_to_s3:
-        description: 'Upload to S3'
-        required: false
-        default: false
-        type: boolean
   push:
     branches:
       - main
@@ -66,7 +61,7 @@ jobs:
           pacman -S --needed --noconfirm \
             qemu-user-static-binfmt qemu-user-static \
             dosfstools wget libarchive arch-install-scripts \
-            parted tree fping git s3cmd zstd github-cli
+            parted tree fping git zstd github-cli
 
       # Build the image using build.sh script
       - name: Build Raspberry Pi Image
@@ -129,28 +124,15 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # -R every time: the checkout in this git-less container falls back
+          # to a REST download with no .git, so gh cannot infer the repository.
           tag="rpi${RPI_MODEL}-latest"
-          gh release view "$tag" >/dev/null 2>&1 ||
-            gh release create "$tag" \
+          gh release view -R "$GITHUB_REPOSITORY" "$tag" >/dev/null 2>&1 ||
+            gh release create -R "$GITHUB_REPOSITORY" "$tag" \
               --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
               --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 22 and password authentication is off. The image contains no credentials at all, so provision the card before booting it: copy your public key to authorized_keys on its FAT boot partition for SSH, and/or write a password to rootpw there for a console login. The root filesystem expands to fill the card on first boot."
-          gh release upload "$tag" "$IMAGE_FILE" --clobber
+          gh release upload -R "$GITHUB_REPOSITORY" "$tag" "$IMAGE_FILE" --clobber
           echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
-
-      # Upload to S3 (optional)
-      - name: Upload Image to S3
-        if: (vars.UPLOAD_TO_S3 == 'true' || inputs.upload_to_s3 == true) && env.IMAGE_FILE != ''
-        run: |
-          echo "Uploading to S3: $IMAGE_NAME"
-          s3cmd \
-            --access_key="${{ secrets.S3_ACCESS_KEY }}" \
-            --secret_key="${{ secrets.S3_SECRET_KEY }}" \
-            --host="${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
-            --host-bucket="${{ secrets.CF_ACCOUNT_ID }}.r2.cloudflarestorage.com" \
-            --region=auto \
-            --progress \
-            --stats \
-            put "$IMAGE_FILE" s3://${{ vars.CF_BUCKET_NAME }}/
 
       # Print summary
       - name: Build Summary
