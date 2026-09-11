@@ -132,7 +132,8 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 - **Wired**: DHCP enabled on all Ethernet interfaces
 - **WiFi**: Optional (configure via environment variables)
 - **SSH Port**: `22` (set `SSH_PORT` to move it)
-- **SSH**: Root login with key authentication only
+- **SSH**: key authentication only — `PasswordAuthentication no` for every account
+- **Accounts**: the base tarball's `alarm` account ships locked
 - **Root filesystem**: expands to fill the card on first boot
 
 ### Pre-installed Packages

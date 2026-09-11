@@ -488,6 +488,14 @@ configure_root_password() {
 
     arch-chroot "$MOUNT_DIR" /bin/bash -c "echo root:$ROOT_PASSWORD | chpasswd"
 
+    # The Arch Linux ARM tarball ships an alarm account whose password is
+    # alarm, documented on their download page. Nothing here uses it, and
+    # leaving it as it arrives puts a published credential on every card.
+    if arch-chroot "$MOUNT_DIR" id alarm &>/dev/null; then
+        arch-chroot "$MOUNT_DIR" passwd --lock alarm
+        log_info "Locked the alarm account the base tarball ships"
+    fi
+
     # Save password to file
     echo "$ROOT_PASSWORD" > "$OUTPUT_DIR/root_password.txt"
     chmod 600 "$OUTPUT_DIR/root_password.txt"
@@ -590,6 +598,14 @@ configure_ssh() {
     echo "Port $SSH_PORT" > "$MOUNT_DIR/etc/ssh/sshd_config.d/20-port.conf"
     echo "PermitRootLogin prohibit-password" > "$MOUNT_DIR/etc/ssh/sshd_config.d/30-root-login.conf"
     echo "AddressFamily any" > "$MOUNT_DIR/etc/ssh/sshd_config.d/40-address-family.conf"
+
+    # PermitRootLogin prohibit-password only covers root. sshd's own default
+    # for everyone else is PasswordAuthentication yes, so every other account
+    # in the image could still be logged into with a password -- including the
+    # base tarball's alarm, whose password is published on archlinuxarm.org.
+    # Nothing in this image is meant to be reached by password.
+    echo "PasswordAuthentication no" > "$MOUNT_DIR/etc/ssh/sshd_config.d/50-password-auth.conf"
+    echo "KbdInteractiveAuthentication no" >> "$MOUNT_DIR/etc/ssh/sshd_config.d/50-password-auth.conf"
 
     arch-chroot "$MOUNT_DIR" systemctl enable sshd
 
