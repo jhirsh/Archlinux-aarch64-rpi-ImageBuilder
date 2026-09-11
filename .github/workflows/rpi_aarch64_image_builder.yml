@@ -69,7 +69,17 @@ jobs:
           WIFI_SSID: ${{ env.WIFI_SSID }}
           WIFI_PASSWORD: ${{ env.WIFI_PASSWORD }}
           ZT_NETWORK_ID: ${{ env.ZT_NETWORK_ID }}
+          ROOT_PASSWORD: ${{ secrets.ROOT_PASSWORD }}
         run: |
+          # build.sh generates a random root password when this is unset, and
+          # then the only way to learn it is to publish it -- from a public
+          # repository, where neither the log nor an artifact is private.
+          # Supplying it as a secret is what keeps it out of both.
+          if [ -z "$ROOT_PASSWORD" ]; then
+            echo "Set the ROOT_PASSWORD repository secret before building."
+            echo "Settings -> Secrets and variables -> Actions -> New secret."
+            exit 1
+          fi
           chmod +x ./build.sh
           ./build.sh --rpi-model ${{ env.RPI_MODEL }}
 
@@ -90,14 +100,9 @@ jobs:
           echo "IMAGE_NAME=$(basename $IMAGE_FILE)" >> $GITHUB_ENV
           echo "Found image: $IMAGE_FILE"
 
-          # Also find the root password file
-          PASSWORD_FILE=$(find . /tmp -maxdepth 2 -name "rpi-build.*" -type d -exec find {} -name "root_password.txt" \; 2>/dev/null | head -1)
-          if [ -n "$PASSWORD_FILE" ]; then
-            echo "PASSWORD_FILE=$PASSWORD_FILE" >> $GITHUB_ENV
-            # Not echoed: a fork of a public repository has public build logs,
-            # and this is the root password of the machine being built.
-            echo "Root password written to the root-password artifact."
-          fi
+          # The root password is not discovered, logged or uploaded any more.
+          # It comes from the ROOT_PASSWORD secret, so it is already known to
+          # whoever runs this and never has to leave the build.
 
       # Upload compressed image as artifact
       - name: Upload Compressed Image as Artifact
@@ -108,15 +113,6 @@ jobs:
           path: ${{ env.IMAGE_FILE }}
           retention-days: 90
           compression-level: 0
-
-      # Upload root password as artifact
-      - name: Upload Root Password as Artifact
-        if: always() && env.PASSWORD_FILE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: root-password
-          path: ${{ env.PASSWORD_FILE }}
-          retention-days: 7
 
       # Publish the image where it can be flashed without unwrapping it first.
       #
@@ -141,7 +137,7 @@ jobs:
           gh release view "$tag" >/dev/null 2>&1 ||
             gh release create "$tag" \
               --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
-              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. The root password is in the root-password artifact of the run that built it, not here."
+              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 34522; the console password is the one set in the ROOT_PASSWORD secret."
           gh release upload "$tag" "$IMAGE_FILE" --clobber
           echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 
@@ -169,9 +165,7 @@ jobs:
           echo "=========================================="
           echo "Raspberry Pi Model: ${{ env.RPI_MODEL }}"
           echo "Image Name: ${{ env.IMAGE_NAME }}"
-          if [ -n "${{ env.PASSWORD_FILE }}" ]; then
-            echo "Root Password: in the root-password artifact, not in this log."
-          fi
+          echo "Root Password: the ROOT_PASSWORD secret you set."
           echo "=========================================="
 
 # ==============================================================================
