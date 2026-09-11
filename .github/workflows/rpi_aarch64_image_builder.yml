@@ -57,7 +57,7 @@ jobs:
           pacman -S --needed --noconfirm \
             qemu-user-static-binfmt qemu-user-static \
             dosfstools wget libarchive arch-install-scripts \
-            parted tree fping pwgen git s3cmd zstd
+            parted tree fping pwgen git s3cmd zstd github-cli
 
       # Build the image using build.sh script
       - name: Build Raspberry Pi Image
@@ -94,8 +94,8 @@ jobs:
           PASSWORD_FILE=$(find . /tmp -maxdepth 2 -name "rpi-build.*" -type d -exec find {} -name "root_password.txt" \; 2>/dev/null | head -1)
           if [ -n "$PASSWORD_FILE" ]; then
             echo "PASSWORD_FILE=$PASSWORD_FILE" >> $GITHUB_ENV
-            # Not echoed: a public repository has public build logs, and this
-            # is the root password of the machine being built.
+            # Not echoed: a fork of a public repository has public build logs,
+            # and this is the root password of the machine being built.
             echo "Root password written to the root-password artifact."
           fi
 
@@ -106,7 +106,7 @@ jobs:
         with:
           name: ${{ env.IMAGE_NAME }}
           path: ${{ env.IMAGE_FILE }}
-          retention-days: 7
+          retention-days: 90
           compression-level: 0
 
       # Upload root password as artifact
@@ -117,6 +117,33 @@ jobs:
           name: root-password
           path: ${{ env.PASSWORD_FILE }}
           retention-days: 7
+
+      # Publish the image where it can be flashed without unwrapping it first.
+      #
+      # Every workflow artifact is served inside a zip GitHub adds itself, so
+      # downloading one gives a zip of a .img.zst: two layers to strip before
+      # any imager will look at it. A release asset is served as the file it
+      # is, on a stable URL, so the image goes straight into Raspberry Pi
+      # Imager (which reads zstd) or one `unzstd` away from anything else.
+      #
+      # The tag is rolling rather than per-commit: the useful question is
+      # "what is the current image for this model", and /releases/latest/
+      # answers it without looking anything up.
+      #
+      # The root password file is deliberately not published here. It is the
+      # credential for the machine, and this release is as public as the repo.
+      - name: Publish the image as a release asset
+        if: env.IMAGE_FILE != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="rpi${RPI_MODEL}-latest"
+          gh release view "$tag" >/dev/null 2>&1 ||
+            gh release create "$tag" \
+              --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
+              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. The root password is in the root-password artifact of the run that built it, not here."
+          gh release upload "$tag" "$IMAGE_FILE" --clobber
+          echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 
       # Upload to S3 (optional)
       - name: Upload Image to S3
