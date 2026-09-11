@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Grow the root partition and its filesystem to fill the card.
+#
+# The image is a fixed 4 GB so the download stays small. A card is nearly
+# always larger, and without this the rest of it is simply never used: the
+# partition table still says 4 GB on a 128 GB card, and the first thing that
+# fills it is whatever gets installed next.
+#
+# Everything used here comes from util-linux and e2fsprogs, both already in
+# base, so this adds no package to the image.
+#
+# The partition table is MBR -- build.sh writes the type codes 0c and 83 --
+# so the last partition can be extended in place. On GPT this would have to
+# relocate the backup header at the end of the disk first.
+
+set -euo pipefail
+
+MARKER="${EXPAND_ROOTFS_MARKER:-/var/lib/expand-rootfs.done}"
+
+log() { echo "expand-rootfs: $*"; }
+
+root_source=$(findmnt --noheadings --output SOURCE /)
+if [[ $root_source != /dev/* ]]; then
+  log "root is on $root_source, which is not a block device; nothing to grow"
+  exit 0
+fi
+
+if [[ $(findmnt --noheadings --output FSTYPE /) != "ext4" ]]; then
+  log "root is not ext4; leaving it alone"
+  exit 0
+fi
+
+disk_name=$(lsblk --noheadings --output PKNAME "$root_source" | head -1)
+if [[ -z $disk_name ]]; then
+  log "$root_source has no parent disk; nothing to grow"
+  exit 0
+fi
+
+# mmcblk0p2 -> 2, nvme0n1p2 -> 2, sda2 -> 2. The "p" separator only appears
+# when the disk name ends in a digit, so it is stripped rather than assumed.
+partition_number=${root_source#/dev/"$disk_name"}
+partition_number=${partition_number#p}
+if [[ ! $partition_number =~ ^[0-9]+$ ]]; then
+  log "cannot tell which partition of $disk_name root is; nothing to grow"
+  exit 0
+fi
+
+log "growing partition $partition_number of $disk_name to fill the disk"
+
+# ", +" keeps this partition's start and extends it over all remaining space.
+# --no-reread and --no-tell-kernel because the partition is mounted right now;
+# partx below is what tells the kernel about the new size instead.
+echo ", +" | sfdisk --force --no-reread --no-tell-kernel \
+  -N "$partition_number" "/dev/$disk_name"
+partx --update --nr "$partition_number" "/dev/$disk_name"
+resize2fs "$root_source"
+
+mkdir -p "$(dirname "$MARKER")"
+: >"$MARKER"
+
+log "done"
+df -h /

@@ -133,6 +133,7 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 - **WiFi**: Optional (configure via environment variables)
 - **SSH Port**: `34522` (not standard 22)
 - **SSH**: Root login with key authentication only
+- **Root filesystem**: expands to fill the card on first boot
 
 ### Pre-installed Packages
 - Base system + development tools

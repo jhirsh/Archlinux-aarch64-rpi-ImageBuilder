@@ -137,7 +137,7 @@ jobs:
           gh release view "$tag" >/dev/null 2>&1 ||
             gh release create "$tag" \
               --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
-              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 34522; the console password is the one set in the ROOT_PASSWORD secret."
+              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 34522; the console password is the one set in the ROOT_PASSWORD secret. The root filesystem expands to fill the card on first boot."
           gh release upload "$tag" "$IMAGE_FILE" --clobber
           echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 

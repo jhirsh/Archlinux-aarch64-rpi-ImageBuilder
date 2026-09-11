@@ -508,6 +508,26 @@ configure_networking() {
     log_success "Networking configured"
 }
 
+configure_rootfs_expansion() {
+    log_info "Installing first-boot root filesystem expansion..."
+
+    # The image is a fixed $IMAGE_SIZE so the download stays small. Without
+    # this the rest of the card is never used, whatever its size.
+    if [[ ! -f "$SCRIPT_DIR/src/usr/local/bin/expand-rootfs" ]]; then
+        log_warn "expand-rootfs not found, skipping; the root filesystem will stay at $IMAGE_SIZE"
+        return 0
+    fi
+
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/expand-rootfs" \
+        "$MOUNT_DIR/usr/local/bin/expand-rootfs"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/expand-rootfs.service" \
+        "$MOUNT_DIR/etc/systemd/system/expand-rootfs.service"
+
+    arch-chroot "$MOUNT_DIR" systemctl enable expand-rootfs.service
+
+    log_success "Root filesystem will expand to fill the card on first boot"
+}
+
 configure_wifi() {
     if [[ -n "$WIFI_SSID" ]] && [[ -n "$WIFI_PASSWORD" ]]; then
         log_info "Configuring WiFi for SSID: $WIFI_SSID..."
@@ -915,6 +935,7 @@ main() {
     configure_hostname
     configure_root_password
     configure_networking
+    configure_rootfs_expansion
     configure_wifi
     configure_ssh
     configure_fstab
