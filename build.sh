@@ -44,7 +44,11 @@ fr_FR ISO-8859-1
 fr_FR@euro ISO-8859-15}"
 
 # Network Configuration
-SSH_PUB_KEY_URLS="${SSH_PUB_KEY_URLS:-https://github.com/ts-sz.keys https://gitlab.com/mg.stratzone.keys}"
+# No default. Whatever is listed here gets root over SSH on every machine
+# flashed with the result, so falling back to someone else's keys is not a
+# convenience. Unset means no key authentication, which the build already warns
+# about further down.
+SSH_PUB_KEY_URLS="${SSH_PUB_KEY_URLS:-}"
 SSH_PORT="${SSH_PORT:-34522}"
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"

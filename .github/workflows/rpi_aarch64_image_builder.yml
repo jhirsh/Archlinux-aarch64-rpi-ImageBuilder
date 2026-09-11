@@ -27,7 +27,10 @@ env:
   RPI_MODEL: ${{ inputs.rpi_model || '5' }}
   IMAGE_NAME_PREFIX: archlinux-rpi
   OS_TIMEZONE: Europe/Paris
-  SSH_PUB_KEY_URLS: https://github.com/ts-sz.keys https://gitlab.com/mg.stratzone.keys
+  # Whoever is listed here gets root over SSH on every machine flashed with
+  # the result. Upstream lists its own maintainers; a fork that leaves that
+  # alone is handing root on its Pi to two strangers.
+  SSH_PUB_KEY_URLS: https://github.com/jhirsh.keys
   # Optional: Override via repository variables or secrets
   WIFI_SSID: ${{ secrets.WIFI_SSID }}
   WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
@@ -91,7 +94,9 @@ jobs:
           PASSWORD_FILE=$(find . /tmp -maxdepth 2 -name "rpi-build.*" -type d -exec find {} -name "root_password.txt" \; 2>/dev/null | head -1)
           if [ -n "$PASSWORD_FILE" ]; then
             echo "PASSWORD_FILE=$PASSWORD_FILE" >> $GITHUB_ENV
-            echo "Root password: $(cat $PASSWORD_FILE)"
+            # Not echoed: a public repository has public build logs, and this
+            # is the root password of the machine being built.
+            echo "Root password written to the root-password artifact."
           fi
 
       # Upload compressed image as artifact
@@ -138,7 +143,7 @@ jobs:
           echo "Raspberry Pi Model: ${{ env.RPI_MODEL }}"
           echo "Image Name: ${{ env.IMAGE_NAME }}"
           if [ -n "${{ env.PASSWORD_FILE }}" ]; then
-            echo "Root Password: $(cat ${{ env.PASSWORD_FILE }} 2>/dev/null || echo 'Not found')"
+            echo "Root Password: in the root-password artifact, not in this log."
           fi
           echo "=========================================="
 
