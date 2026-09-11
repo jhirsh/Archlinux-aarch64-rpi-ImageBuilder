@@ -34,7 +34,9 @@ if [[ -s $TARGET ]]; then
   exit 0
 fi
 
+# Without the CR a Windows editor will have put on every line.
 install -d -m 700 "$(dirname "$TARGET")"
-install -m 600 "$SOURCE" "$TARGET"
+tr -d '\r' <"$SOURCE" >"$TARGET"
+chmod 600 "$TARGET"
 
 log "installed $(grep -c . <"$TARGET") key(s) from $SOURCE"

@@ -26,10 +26,9 @@ permissions:
 env:
   RPI_MODEL: ${{ inputs.rpi_model || '5' }}
   IMAGE_NAME_PREFIX: archlinux-rpi
-  # Nothing in the build can detect where the card will be used: the runner is
-  # always UTC and the Pi has no clock. This fork builds for one place, so it
-  # is stated once here. Override OS_TIMEZONE for a one-off build elsewhere.
-  OS_TIMEZONE: America/Los_Angeles
+  # UTC. Where the card will be used is the flasher's business, not the
+  # builder's, and it is one command after login: timedatectl set-timezone.
+  OS_TIMEZONE: UTC
   # Deliberately unset, and it should stay that way while this repository is
   # public. A key baked in here is a key that every person who flashes the
   # published image grants root to -- whoever ran the build. Upstream's images
@@ -41,10 +40,10 @@ env:
   # only one who gets in. Set SSH_PUB_KEY_URLS only for a private build of an
   # image nobody else will flash.
   SSH_PUB_KEY_URLS: ""
-  # Optional: Override via repository variables or secrets
-  WIFI_SSID: ${{ secrets.WIFI_SSID }}
-  WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
-  ZT_NETWORK_ID: ${{ secrets.ZT_NETWORK_ID }}
+  # WIFI_SSID, WIFI_PASSWORD and ZT_NETWORK_ID are deliberately not passed
+  # in. A WiFi PSK would be written in the clear into a downloadable image,
+  # and a ZeroTier ID would have every stranger's Pi trying to join that
+  # network on first boot. build.sh still honours them for a private build.
 
 jobs:
   build-image:
@@ -76,9 +75,6 @@ jobs:
           IMAGE_NAME_PREFIX: ${{ env.IMAGE_NAME_PREFIX }}
           OS_TIMEZONE: ${{ env.OS_TIMEZONE }}
           SSH_PUB_KEY_URLS: ${{ env.SSH_PUB_KEY_URLS }}
-          WIFI_SSID: ${{ env.WIFI_SSID }}
-          WIFI_PASSWORD: ${{ env.WIFI_PASSWORD }}
-          ZT_NETWORK_ID: ${{ env.ZT_NETWORK_ID }}
         run: |
           chmod +x ./build.sh
           ./build.sh --rpi-model ${{ env.RPI_MODEL }}
@@ -127,7 +123,7 @@ jobs:
       # answers it without looking anything up.
       #
       # Nothing published here is a credential: the image carries no password
-      # at all, only the public SSH keys named above.
+      # and no SSH key at all.
       - name: Publish the image as a release asset
         if: env.IMAGE_FILE != ''
         env:

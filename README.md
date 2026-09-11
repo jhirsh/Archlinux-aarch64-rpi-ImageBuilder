@@ -149,12 +149,12 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 ## Default Configuration
 
 ### System Settings
-- **Hostname**: `sz-<commit>-rpi<model>` (e.g., `sz-f471ba3-rpi5`)
+- **Hostname**: `archlinux-<commit>-rpi<model>` (e.g., `archlinux-f471ba3-rpi5`)
 - **Default User**: `root`
 - **Root Password**: none — every account ships locked, see [Provisioning the card](#provisioning-the-card)
 - **Locale**: `en_US.UTF-8`
 - **Keymap**: `us-acentos`
-- **Timezone**: `America/Los_Angeles` (set `OS_TIMEZONE` to change it)
+- **Timezone**: `UTC`. Set yours after logging in: `timedatectl set-timezone Europe/Paris`
 
 ### Network Configuration
 - **Wired**: DHCP enabled on all Ethernet interfaces
@@ -187,20 +187,18 @@ env:
     base base-devel git neovim ...
   OS_DEFAULT_LOCALE: en_US.UTF-8   # System locale
   OS_KEYMAP: us-acentos            # Console keymap
-  OS_TIMEZONE: America/Los_Angeles # System timezone
+  OS_TIMEZONE: UTC                 # System timezone
   SSH_PUB_KEY_URLS: ""             # Bake keys in: private builds only
 ```
 
-### Adding WiFi Credentials
+### WiFi and ZeroTier
 
-Set repository secrets:
-- `WIFI_SSID`: Your WiFi network name
-- `WIFI_PASSWORD`: Your WiFi password
-
-### ZeroTier Network
-
-Set repository secret:
-- `ZT_NETWORK_ID`: Your ZeroTier network ID
+`build.sh` accepts `WIFI_SSID`, `WIFI_PASSWORD` and `ZT_NETWORK_ID`, but the
+workflow does not pass them in and the README will not tell you how to: the
+PSK is written in the clear into the image, and the ZeroTier ID makes every
+Pi flashed from it try to join your network. Use them only for a private
+build nobody else will flash. On a published image, join WiFi with `iwctl`
+and ZeroTier with `zerotier-cli join` after logging in.
 
 ## Partition Layout
 

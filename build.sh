@@ -34,7 +34,7 @@ IMAGE_NAME_PREFIX="${IMAGE_NAME_PREFIX:-archlinux-rpi}"
 BOOT_PARTITION_SIZE="${BOOT_PARTITION_SIZE:-512M}"
 
 # System Configuration
-OS_TIMEZONE="${OS_TIMEZONE:-America/Los_Angeles}"
+OS_TIMEZONE="${OS_TIMEZONE:-UTC}"
 OS_DEFAULT_LOCALE="${OS_DEFAULT_LOCALE:-en_US.UTF-8}"
 OS_KEYMAP="${OS_KEYMAP:-us-acentos}"
 OS_LOCALES="${OS_LOCALES:-en_US.UTF-8 UTF-8
@@ -839,6 +839,22 @@ update_system() {
     log_success "System updated"
 }
 
+strip_machine_identity() {
+    log_info "Stripping per-machine identity so every card generates its own..."
+
+    # Anything that identifies one machine must not be shared by every card
+    # flashed from this image: a common machine-id gives them all the same
+    # DHCP DUID and IPv6 addresses, common host keys make the SSH fingerprint
+    # meaningless, and a common random seed is no seed. All of it is
+    # regenerated on first boot when absent or empty.
+    : > "$MOUNT_DIR/etc/machine-id"
+    rm -f "$MOUNT_DIR"/var/lib/dbus/machine-id \
+          "$MOUNT_DIR"/var/lib/systemd/random-seed \
+          "$MOUNT_DIR"/etc/ssh/ssh_host_*
+
+    log_success "Machine identity stripped"
+}
+
 compress_image() {
     log_info "Compressing image with zstd..."
 
@@ -911,9 +927,9 @@ Environment Variables (override defaults):
   IMAGE_SIZE             Image size
   OS_TIMEZONE            System timezone
   SSH_PUB_KEY_URLS       Space-separated URLs to fetch SSH public keys
-  WIFI_SSID              WiFi SSID (optional)
-  WIFI_PASSWORD          WiFi password (optional)
-  ZT_NETWORK_ID          ZeroTier network ID (optional)
+  WIFI_SSID              WiFi SSID (private builds only: the PSK goes into the image)
+  WIFI_PASSWORD          WiFi password (private builds only)
+  ZT_NETWORK_ID          ZeroTier network ID (private builds only)
 
 Examples:
   sudo $0 --rpi-model 5
@@ -981,6 +997,7 @@ main() {
     configure_zerotier
     configure_usb_gadget
     update_system
+    strip_machine_identity
 
     log_info "Unmounting filesystems..."
     sync

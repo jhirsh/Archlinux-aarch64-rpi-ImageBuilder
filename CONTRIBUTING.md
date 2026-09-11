@@ -33,13 +33,6 @@ Building the image itself needs a privileged Arch container; the GitHub
 Actions workflow is the supported path, and `./run-act.sh` runs it locally
 through [act](https://github.com/nektos/act).
 
-## Things that are deliberately personal
-
-These are configuration for one person's machine, not defaults to improve:
-
-- `OS_TIMEZONE` is set for where the cards get used. Nothing in the build can
-  detect that — the runner is always UTC and the Pi has no clock.
-
 ## Security
 
 The image is published, so treat anything written into it as public. In
@@ -49,9 +42,10 @@ person who flashes it grants root to, whoever ran the build. `root` and
 `alarm` ship locked for the same reason. Both the key and the password are
 provisioned per card, on first boot, from files on its boot partition.
 
-Do not set the `WIFI_SSID` / `WIFI_PASSWORD` secrets
-while this repository is public — the PSK would be baked into a downloadable
-image.
+The workflow does not read `WIFI_SSID`, `WIFI_PASSWORD` or `ZT_NETWORK_ID`
+and must not start to while this repository is public — the PSK would be
+baked into a downloadable image, and the ZeroTier ID would have every Pi
+flashed from it knocking on that network.
 
 If you find a security problem, open an issue; there is nothing here worth a
 private disclosure process.

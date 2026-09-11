@@ -47,3 +47,10 @@ pass "no file on the boot partition leaves root with no keys"
 seed ""
 [[ ! -s $tmp/home/.ssh/authorized_keys ]] || fail "an empty source installs nothing"
 pass "an empty file on the boot partition installs nothing"
+
+# The file was written on Windows more often than not, and Notepad ends every
+# line with CRLF.
+seed $'ssh-ed25519 AAAAwindows me@pc\r'
+[[ $(cat "$tmp/home/.ssh/authorized_keys") == "ssh-ed25519 AAAAwindows me@pc" ]] ||
+  fail "CR line endings are stripped" "$(od -c "$tmp/home/.ssh/authorized_keys")"
+pass "a file with Windows line endings installs clean keys"
