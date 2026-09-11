@@ -34,7 +34,7 @@ IMAGE_NAME_PREFIX="${IMAGE_NAME_PREFIX:-archlinux-rpi}"
 BOOT_PARTITION_SIZE="${BOOT_PARTITION_SIZE:-512M}"
 
 # System Configuration
-OS_TIMEZONE="${OS_TIMEZONE:-Europe/Paris}"
+OS_TIMEZONE="${OS_TIMEZONE:-UTC}"
 OS_DEFAULT_LOCALE="${OS_DEFAULT_LOCALE:-en_US.UTF-8}"
 OS_KEYMAP="${OS_KEYMAP:-us-acentos}"
 OS_LOCALES="${OS_LOCALES:-en_US.UTF-8 UTF-8
@@ -44,8 +44,16 @@ fr_FR ISO-8859-1
 fr_FR@euro ISO-8859-15}"
 
 # Network Configuration
-SSH_PUB_KEY_URLS="${SSH_PUB_KEY_URLS:-https://github.com/ts-sz.keys https://gitlab.com/mg.stratzone.keys}"
-SSH_PORT="${SSH_PORT:-34522}"
+# No default. Whatever is listed here gets root over SSH on every machine
+# flashed with the result, so falling back to someone else's keys is not a
+# convenience. Unset means no key authentication, which the build already warns
+# about further down.
+SSH_PUB_KEY_URLS="${SSH_PUB_KEY_URLS:-}"
+# Upstream put sshd on a high port to keep scanner noise out of the journal.
+# That is a reasonable trade on a public host and a bad one on a Pi on a home
+# network, where the cost is remembering -p 34522 on every command for the
+# life of the machine. Set SSH_PORT to move it back.
+SSH_PORT="${SSH_PORT:-22}"
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 ZT_NETWORK_ID="${ZT_NETWORK_ID:-}"
@@ -54,7 +62,7 @@ ZT_NETWORK_ID="${ZT_NETWORK_ID:-}"
 OS_PACKAGES="${OS_PACKAGES:-base base-devel dosfstools git mkinitcpio-utils neovim nftables openssh python qrencode rsync sudo tailscale uboot-tools unzip zerotier-one zsh iwd wireless-regdb linux-firmware crda raspberrypi-bootloader firmware-raspberrypi zstd}"
 
 # Build dependencies
-BUILD_DEPS="${BUILD_DEPS:-qemu-user-static-binfmt qemu-user-static dosfstools wget libarchive arch-install-scripts parted tree fping pwgen git s3cmd zstd}"
+BUILD_DEPS="${BUILD_DEPS:-qemu-user-static-binfmt qemu-user-static dosfstools wget libarchive arch-install-scripts parted tree fping git s3cmd zstd}"
 
 # Download URLs
 ARCH_AARCH64_MIRROR="${ARCH_AARCH64_MIRROR:-http://os.archlinuxarm.org/os}"
@@ -73,7 +81,6 @@ LOOP_DEVICE=""
 BUILD_DATE=$(date +%Y%m%d)
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
 RPI_HOSTNAME="${RPI_HOSTNAME:-archlinux-${SHORT_SHA}-rpi${RPI_MODEL}}"
-ROOT_PASSWORD="${ROOT_PASSWORD:-$(pwgen -s 17 1 2>/dev/null || echo "changeme")}"
 IMAGE_NAME="${IMAGE_NAME_PREFIX}-${ARM_VERSION}-rpi${RPI_MODEL}_v${SHORT_SHA}_${BUILD_DATE}.img"
 
 # Flags
@@ -455,6 +462,13 @@ configure_locales() {
 configure_timezone() {
     log_info "Configuring timezone: $OS_TIMEZONE..."
 
+    # ln -sf writes the link whether or not the target exists, so a misspelt
+    # zone produced a dangling /etc/localtime and a machine that quietly ran on
+    # UTC. On a Pi, which has no RTC and starts every boot with a wrong clock
+    # anyway, that is the last thing that should fail silently.
+    [[ -e "$MOUNT_DIR/usr/share/zoneinfo/$OS_TIMEZONE" ]] ||
+        die "No such timezone: $OS_TIMEZONE (expected a /usr/share/zoneinfo name, e.g. America/Los_Angeles)"
+
     ln -sf "/usr/share/zoneinfo/$OS_TIMEZONE" "$MOUNT_DIR/etc/localtime"
 
     log_success "Timezone configured"
@@ -468,16 +482,37 @@ configure_hostname() {
     log_success "Hostname configured"
 }
 
-configure_root_password() {
-    log_info "Configuring root password..."
+configure_accounts() {
+    log_info "Locking the shipped accounts..."
 
-    arch-chroot "$MOUNT_DIR" /bin/bash -c "echo root:$ROOT_PASSWORD | chpasswd"
+    # No password goes into the image. Whatever is written to /etc/shadow here
+    # ships inside a downloadable image, so the hash is public and can be
+    # attacked offline indefinitely -- and every card flashed from the image
+    # would share it. set-root-password-from-boot supplies one per card
+    # instead, after flashing. Until then the SSH key is the way in.
+    arch-chroot "$MOUNT_DIR" passwd --lock root
 
-    # Save password to file
-    echo "$ROOT_PASSWORD" > "$OUTPUT_DIR/root_password.txt"
-    chmod 600 "$OUTPUT_DIR/root_password.txt"
+    # The Arch Linux ARM tarball ships alarm/alarm, and the password is on
+    # their download page. Nothing here uses the account, and leaving it as it
+    # arrives puts a documented credential on a published image.
+    if arch-chroot "$MOUNT_DIR" id alarm &>/dev/null; then
+        arch-chroot "$MOUNT_DIR" passwd --lock alarm
+        log_info "Locked the alarm account the base tarball ships"
+    fi
 
-    log_success "Root password configured and saved to root_password.txt"
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/set-root-password-from-boot" \
+        "$MOUNT_DIR/usr/local/bin/set-root-password-from-boot"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/set-root-password-from-boot.service" \
+        "$MOUNT_DIR/etc/systemd/system/set-root-password-from-boot.service"
+    arch-chroot "$MOUNT_DIR" systemctl enable set-root-password-from-boot.service
+
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/install-authorized-keys-from-boot" \
+        "$MOUNT_DIR/usr/local/bin/install-authorized-keys-from-boot"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/install-authorized-keys-from-boot.service" \
+        "$MOUNT_DIR/etc/systemd/system/install-authorized-keys-from-boot.service"
+    arch-chroot "$MOUNT_DIR" systemctl enable install-authorized-keys-from-boot.service
+
+    log_success "Accounts locked; write a password to rootpw on the boot partition to set one"
 }
 
 configure_networking() {
@@ -502,6 +537,26 @@ configure_networking() {
     fi
 
     log_success "Networking configured"
+}
+
+configure_rootfs_expansion() {
+    log_info "Installing first-boot root filesystem expansion..."
+
+    # The image is a fixed $IMAGE_SIZE so the download stays small. Without
+    # this the rest of the card is never used, whatever its size.
+    if [[ ! -f "$SCRIPT_DIR/src/usr/local/bin/expand-rootfs" ]]; then
+        log_warn "expand-rootfs not found, skipping; the root filesystem will stay at $IMAGE_SIZE"
+        return 0
+    fi
+
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/expand-rootfs" \
+        "$MOUNT_DIR/usr/local/bin/expand-rootfs"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/expand-rootfs.service" \
+        "$MOUNT_DIR/etc/systemd/system/expand-rootfs.service"
+
+    arch-chroot "$MOUNT_DIR" systemctl enable expand-rootfs.service
+
+    log_success "Root filesystem will expand to fill the card on first boot"
 }
 
 configure_wifi() {
@@ -555,6 +610,14 @@ configure_ssh() {
     echo "Port $SSH_PORT" > "$MOUNT_DIR/etc/ssh/sshd_config.d/20-port.conf"
     echo "PermitRootLogin prohibit-password" > "$MOUNT_DIR/etc/ssh/sshd_config.d/30-root-login.conf"
     echo "AddressFamily any" > "$MOUNT_DIR/etc/ssh/sshd_config.d/40-address-family.conf"
+
+    # PermitRootLogin prohibit-password only covers root. sshd's own default
+    # for everyone else is PasswordAuthentication yes, so every other account
+    # in the image could still be logged into with a password -- including the
+    # base tarball's alarm, whose password is published on archlinuxarm.org.
+    # Nothing in this image is meant to be reached by password.
+    echo "PasswordAuthentication no" > "$MOUNT_DIR/etc/ssh/sshd_config.d/50-password-auth.conf"
+    echo "KbdInteractiveAuthentication no" >> "$MOUNT_DIR/etc/ssh/sshd_config.d/50-password-auth.conf"
 
     arch-chroot "$MOUNT_DIR" systemctl enable sshd
 
@@ -776,6 +839,22 @@ update_system() {
     log_success "System updated"
 }
 
+strip_machine_identity() {
+    log_info "Stripping per-machine identity so every card generates its own..."
+
+    # Anything that identifies one machine must not be shared by every card
+    # flashed from this image: a common machine-id gives them all the same
+    # DHCP DUID and IPv6 addresses, common host keys make the SSH fingerprint
+    # meaningless, and a common random seed is no seed. All of it is
+    # regenerated on first boot when absent or empty.
+    : > "$MOUNT_DIR/etc/machine-id"
+    rm -f "$MOUNT_DIR"/var/lib/dbus/machine-id \
+          "$MOUNT_DIR"/var/lib/systemd/random-seed \
+          "$MOUNT_DIR"/etc/ssh/ssh_host_*
+
+    log_success "Machine identity stripped"
+}
+
 compress_image() {
     log_info "Compressing image with zstd..."
 
@@ -848,9 +927,9 @@ Environment Variables (override defaults):
   IMAGE_SIZE             Image size
   OS_TIMEZONE            System timezone
   SSH_PUB_KEY_URLS       Space-separated URLs to fetch SSH public keys
-  WIFI_SSID              WiFi SSID (optional)
-  WIFI_PASSWORD          WiFi password (optional)
-  ZT_NETWORK_ID          ZeroTier network ID (optional)
+  WIFI_SSID              WiFi SSID (private builds only: the PSK goes into the image)
+  WIFI_PASSWORD          WiFi password (private builds only)
+  ZT_NETWORK_ID          ZeroTier network ID (private builds only)
 
 Examples:
   sudo $0 --rpi-model 5
@@ -909,14 +988,16 @@ main() {
     configure_locales
     configure_timezone
     configure_hostname
-    configure_root_password
+    configure_accounts
     configure_networking
+    configure_rootfs_expansion
     configure_wifi
     configure_ssh
     configure_fstab
     configure_zerotier
     configure_usb_gadget
     update_system
+    strip_machine_identity
 
     log_info "Unmounting filesystems..."
     sync
@@ -933,8 +1014,9 @@ main() {
     log_success "Build completed successfully!"
     log_success "=========================================="
     log_success "Image: $OUTPUT_DIR/$IMAGE_NAME.zst"
-    log_success "Root password: $ROOT_PASSWORD"
-    log_success "Password saved to: $OUTPUT_DIR/root_password.txt"
+    log_success "Root and alarm are locked and no password ships in the image."
+    log_success "Log in with your SSH key, or write one line to rootpw on the"
+    log_success "boot partition of the card to set a console password."
     log_success "=========================================="
 }
 

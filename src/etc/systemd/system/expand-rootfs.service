@@ -1,0 +1,18 @@
+[Unit]
+Description=Expand the root filesystem to fill the card
+Documentation=man:sfdisk(8) man:resize2fs(8)
+# The script writes this on success. Gating here as well means a booted
+# machine does not rewrite its own partition table on every start.
+ConditionPathExists=!/var/lib/expand-rootfs.done
+After=systemd-remount-fs.service
+Before=sshd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/expand-rootfs
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

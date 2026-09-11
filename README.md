@@ -8,7 +8,7 @@ Automated builder for custom Arch Linux ARM images for Raspberry Pi 4 and 5, wit
 - **Raspberry Pi 4 & 5 Support** - Choose your target model during build
 - **USB Serial Console** - Access your Pi via USB power cable (no keyboard/monitor needed)
 - **Pre-configured Networking** - Systemd-networkd with optional WiFi support
-- **SSH Access** - Automated SSH key deployment from GitHub
+- **SSH Access** - Key-only, provisioned per card; no credential ships in the image
 - **ZeroTier Support** - Built-in mesh networking capability
 - **Custom Package Set** - Pre-installed tools including Tailscale, ZeroTier, and development utilities
 
@@ -78,6 +78,34 @@ sync
 sudo eject /dev/sdX
 ```
 
+### Provisioning the card
+
+**The image contains no credentials at all, so a card flashed and booted with
+nothing added is not reachable.** That is deliberate: the image is published,
+and anything baked into it — a password hash, an SSH key — would be shared by
+everyone who flashes it, granting access to whoever ran the build. Upstream's
+images authorize their maintainers for exactly this reason.
+
+Instead you provision your own card. The boot partition is FAT32, so it mounts
+as an ordinary volume as soon as the card is written. Add either or both:
+
+```bash
+# SSH access for your key — the normal way in
+cp ~/.ssh/id_ed25519.pub /Volumes/RPI64-BOOT/authorized_keys
+
+# A console / USB-serial password — the way in when the network is not up
+echo 'the password you want' > /Volumes/RPI64-BOOT/rootpw
+```
+
+On the next boot the Pi installs the key and sets root's password. The
+password file is deleted once used; the key file is not, since a public key is
+not a secret. Adding either later and rebooting works the same way, so a card
+is never permanently locked — you can always take it back to your machine.
+
+Two details worth knowing. The key is only seeded when root has none, so a key
+you add later with `ssh-copy-id` survives a reboot. And the password sits on
+the card in the clear until the boot that consumes it.
+
 ## USB Serial Console Access
 
 This image comes pre-configured with USB serial gadget mode, allowing console access via the USB-C power cable.
@@ -121,18 +149,21 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 ## Default Configuration
 
 ### System Settings
-- **Hostname**: `sz-<commit>-rpi<model>` (e.g., `sz-f471ba3-rpi5`)
+- **Hostname**: `archlinux-<commit>-rpi<model>` (e.g., `archlinux-f471ba3-rpi5`)
 - **Default User**: `root`
-- **Root Password**: Generated randomly during build (saved in workflow artifacts)
+- **Root Password**: none — every account ships locked, see [Provisioning the card](#provisioning-the-card)
 - **Locale**: `en_US.UTF-8`
 - **Keymap**: `us-acentos`
-- **Timezone**: UTC (default, can be changed)
+- **Timezone**: `UTC`. Set yours after logging in: `timedatectl set-timezone Europe/Paris`
 
 ### Network Configuration
 - **Wired**: DHCP enabled on all Ethernet interfaces
 - **WiFi**: Optional (configure via environment variables)
-- **SSH Port**: `34522` (not standard 22)
-- **SSH**: Root login with key authentication only
+- **SSH Port**: `22` (set `SSH_PORT` to move it)
+- **SSH**: key authentication only — `PasswordAuthentication no` for every account
+- **Accounts**: `root` and the base tarball's `alarm` both ship locked
+- **SSH keys**: none in the image; read from `authorized_keys` on the boot partition
+- **Root filesystem**: expands to fill the card on first boot
 
 ### Pre-installed Packages
 - Base system + development tools
@@ -157,19 +188,17 @@ env:
   OS_DEFAULT_LOCALE: en_US.UTF-8   # System locale
   OS_KEYMAP: us-acentos            # Console keymap
   OS_TIMEZONE: UTC                 # System timezone
-  SSH_PUB_KEY_URL: https://github.com/username.keys  # SSH public keys
+  SSH_PUB_KEY_URLS: ""             # Bake keys in: private builds only
 ```
 
-### Adding WiFi Credentials
+### WiFi and ZeroTier
 
-Set repository secrets:
-- `WIFI_SSID`: Your WiFi network name
-- `WIFI_PASSWORD`: Your WiFi password
-
-### ZeroTier Network
-
-Set repository secret:
-- `ZT_NETWORK_ID`: Your ZeroTier network ID
+`build.sh` accepts `WIFI_SSID`, `WIFI_PASSWORD` and `ZT_NETWORK_ID`, but the
+workflow does not pass them in and the README will not tell you how to: the
+PSK is written in the clear into the image, and the ZeroTier ID makes every
+Pi flashed from it try to join your network. Use them only for a private
+build nobody else will flash. On a published image, join WiFi with `iwctl`
+and ZeroTier with `zerotier-cli join` after logging in.
 
 ## Partition Layout
 
@@ -208,9 +237,9 @@ Set repository secret:
    systemctl status sshd
    ```
 
-2. Remember custom port:
+2. If `SSH_PORT` was changed at build time, name it:
    ```bash
-   ssh -p 34522 root@<pi-ip-address>
+   ssh -p <port> root@<pi-ip-address>
    ```
 
 ### WiFi Not Connecting

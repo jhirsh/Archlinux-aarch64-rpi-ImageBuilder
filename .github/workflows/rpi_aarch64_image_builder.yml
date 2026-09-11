@@ -26,12 +26,24 @@ permissions:
 env:
   RPI_MODEL: ${{ inputs.rpi_model || '5' }}
   IMAGE_NAME_PREFIX: archlinux-rpi
-  OS_TIMEZONE: Europe/Paris
-  SSH_PUB_KEY_URLS: https://github.com/ts-sz.keys https://gitlab.com/mg.stratzone.keys
-  # Optional: Override via repository variables or secrets
-  WIFI_SSID: ${{ secrets.WIFI_SSID }}
-  WIFI_PASSWORD: ${{ secrets.WIFI_PASSWORD }}
-  ZT_NETWORK_ID: ${{ secrets.ZT_NETWORK_ID }}
+  # UTC. Where the card will be used is the flasher's business, not the
+  # builder's, and it is one command after login: timedatectl set-timezone.
+  OS_TIMEZONE: UTC
+  # Deliberately unset, and it should stay that way while this repository is
+  # public. A key baked in here is a key that every person who flashes the
+  # published image grants root to -- whoever ran the build. Upstream's images
+  # authorize its maintainers for exactly this reason, and doing the same with
+  # a different name on it would be no better.
+  #
+  # install-authorized-keys-from-boot reads authorized_keys off the card's
+  # boot partition on first boot instead, so whoever writes the card is the
+  # only one who gets in. Set SSH_PUB_KEY_URLS only for a private build of an
+  # image nobody else will flash.
+  SSH_PUB_KEY_URLS: ""
+  # WIFI_SSID, WIFI_PASSWORD and ZT_NETWORK_ID are deliberately not passed
+  # in. A WiFi PSK would be written in the clear into a downloadable image,
+  # and a ZeroTier ID would have every stranger's Pi trying to join that
+  # network on first boot. build.sh still honours them for a private build.
 
 jobs:
   build-image:
@@ -54,7 +66,7 @@ jobs:
           pacman -S --needed --noconfirm \
             qemu-user-static-binfmt qemu-user-static \
             dosfstools wget libarchive arch-install-scripts \
-            parted tree fping pwgen git s3cmd zstd
+            parted tree fping git s3cmd zstd github-cli
 
       # Build the image using build.sh script
       - name: Build Raspberry Pi Image
@@ -63,9 +75,6 @@ jobs:
           IMAGE_NAME_PREFIX: ${{ env.IMAGE_NAME_PREFIX }}
           OS_TIMEZONE: ${{ env.OS_TIMEZONE }}
           SSH_PUB_KEY_URLS: ${{ env.SSH_PUB_KEY_URLS }}
-          WIFI_SSID: ${{ env.WIFI_SSID }}
-          WIFI_PASSWORD: ${{ env.WIFI_PASSWORD }}
-          ZT_NETWORK_ID: ${{ env.ZT_NETWORK_ID }}
         run: |
           chmod +x ./build.sh
           ./build.sh --rpi-model ${{ env.RPI_MODEL }}
@@ -87,12 +96,9 @@ jobs:
           echo "IMAGE_NAME=$(basename $IMAGE_FILE)" >> $GITHUB_ENV
           echo "Found image: $IMAGE_FILE"
 
-          # Also find the root password file
-          PASSWORD_FILE=$(find . /tmp -maxdepth 2 -name "rpi-build.*" -type d -exec find {} -name "root_password.txt" \; 2>/dev/null | head -1)
-          if [ -n "$PASSWORD_FILE" ]; then
-            echo "PASSWORD_FILE=$PASSWORD_FILE" >> $GITHUB_ENV
-            echo "Root password: $(cat $PASSWORD_FILE)"
-          fi
+          # No password is discovered, logged or uploaded any more: the image
+          # ships with every account locked and one is set per card, on the
+          # first boot, from a file on the boot partition.
 
       # Upload compressed image as artifact
       - name: Upload Compressed Image as Artifact
@@ -101,17 +107,35 @@ jobs:
         with:
           name: ${{ env.IMAGE_NAME }}
           path: ${{ env.IMAGE_FILE }}
-          retention-days: 7
+          retention-days: 90
           compression-level: 0
 
-      # Upload root password as artifact
-      - name: Upload Root Password as Artifact
-        if: always() && env.PASSWORD_FILE != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: root-password
-          path: ${{ env.PASSWORD_FILE }}
-          retention-days: 7
+      # Publish the image where it can be flashed without unwrapping it first.
+      #
+      # Every workflow artifact is served inside a zip GitHub adds itself, so
+      # downloading one gives a zip of a .img.zst: two layers to strip before
+      # any imager will look at it. A release asset is served as the file it
+      # is, on a stable URL, so the image goes straight into Raspberry Pi
+      # Imager (which reads zstd) or one `unzstd` away from anything else.
+      #
+      # The tag is rolling rather than per-commit: the useful question is
+      # "what is the current image for this model", and /releases/latest/
+      # answers it without looking anything up.
+      #
+      # Nothing published here is a credential: the image carries no password
+      # and no SSH key at all.
+      - name: Publish the image as a release asset
+        if: env.IMAGE_FILE != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="rpi${RPI_MODEL}-latest"
+          gh release view "$tag" >/dev/null 2>&1 ||
+            gh release create "$tag" \
+              --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
+              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 22 and password authentication is off. The image contains no credentials at all, so provision the card before booting it: copy your public key to authorized_keys on its FAT boot partition for SSH, and/or write a password to rootpw there for a console login. The root filesystem expands to fill the card on first boot."
+          gh release upload "$tag" "$IMAGE_FILE" --clobber
+          echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 
       # Upload to S3 (optional)
       - name: Upload Image to S3
@@ -137,9 +161,7 @@ jobs:
           echo "=========================================="
           echo "Raspberry Pi Model: ${{ env.RPI_MODEL }}"
           echo "Image Name: ${{ env.IMAGE_NAME }}"
-          if [ -n "${{ env.PASSWORD_FILE }}" ]; then
-            echo "Root Password: $(cat ${{ env.PASSWORD_FILE }} 2>/dev/null || echo 'Not found')"
-          fi
+          echo "Accounts: locked; set one via rootpw on the boot partition."
           echo "=========================================="
 
 # ==============================================================================
