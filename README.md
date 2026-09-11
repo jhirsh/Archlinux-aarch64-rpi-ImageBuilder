@@ -78,6 +78,25 @@ sync
 sudo eject /dev/sdX
 ```
 
+### Setting a console password
+
+The image carries no password. Anything written into `/etc/shadow` at build
+time ships inside a downloadable image, so the hash would be public and every
+card flashed from it would share the same one. Instead `root` and `alarm` are
+locked, and the way in is the SSH key built into the image.
+
+For a console or USB-serial login — the path that still works when the network
+does not — set a password per card. The boot partition is FAT32, so it mounts
+as an ordinary volume as soon as the card is written:
+
+```bash
+echo 'the password you want' > /Volumes/RPI64-BOOT/rootpw
+```
+
+On the next boot the Pi sets root's password from that file and deletes it.
+Dropping the file on later and rebooting works the same way. Note that the
+password sits on the card in the clear until that boot happens.
+
 ## USB Serial Console Access
 
 This image comes pre-configured with USB serial gadget mode, allowing console access via the USB-C power cable.
@@ -123,7 +142,7 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 ### System Settings
 - **Hostname**: `sz-<commit>-rpi<model>` (e.g., `sz-f471ba3-rpi5`)
 - **Default User**: `root`
-- **Root Password**: whatever the `ROOT_PASSWORD` repository secret is set to
+- **Root Password**: none — every account ships locked, see [Setting a console password](#setting-a-console-password)
 - **Locale**: `en_US.UTF-8`
 - **Keymap**: `us-acentos`
 - **Timezone**: `America/Los_Angeles` (set `OS_TIMEZONE` to change it)
@@ -133,7 +152,7 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 - **WiFi**: Optional (configure via environment variables)
 - **SSH Port**: `22` (set `SSH_PORT` to move it)
 - **SSH**: key authentication only — `PasswordAuthentication no` for every account
-- **Accounts**: the base tarball's `alarm` account ships locked
+- **Accounts**: `root` and the base tarball's `alarm` both ship locked
 - **Root filesystem**: expands to fill the card on first boot
 
 ### Pre-installed Packages

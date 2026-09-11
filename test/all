@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# Run every check in here. They stub out anything that would touch a disk or
+# an account, so this is safe to run on the machine you are working on.
+
+set -uo pipefail
+
+here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+status=0
+
+for test in "$here"/*-test.sh; do
+  echo "# ${test##*/}"
+  bash "$test" || status=1
+done
+
+exit "$status"

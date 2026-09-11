@@ -62,7 +62,7 @@ ZT_NETWORK_ID="${ZT_NETWORK_ID:-}"
 OS_PACKAGES="${OS_PACKAGES:-base base-devel dosfstools git mkinitcpio-utils neovim nftables openssh python qrencode rsync sudo tailscale uboot-tools unzip zerotier-one zsh iwd wireless-regdb linux-firmware crda raspberrypi-bootloader firmware-raspberrypi zstd}"
 
 # Build dependencies
-BUILD_DEPS="${BUILD_DEPS:-qemu-user-static-binfmt qemu-user-static dosfstools wget libarchive arch-install-scripts parted tree fping pwgen git s3cmd zstd}"
+BUILD_DEPS="${BUILD_DEPS:-qemu-user-static-binfmt qemu-user-static dosfstools wget libarchive arch-install-scripts parted tree fping git s3cmd zstd}"
 
 # Download URLs
 ARCH_AARCH64_MIRROR="${ARCH_AARCH64_MIRROR:-http://os.archlinuxarm.org/os}"
@@ -81,7 +81,6 @@ LOOP_DEVICE=""
 BUILD_DATE=$(date +%Y%m%d)
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "local")
 RPI_HOSTNAME="${RPI_HOSTNAME:-archlinux-${SHORT_SHA}-rpi${RPI_MODEL}}"
-ROOT_PASSWORD="${ROOT_PASSWORD:-$(pwgen -s 17 1 2>/dev/null || echo "changeme")}"
 IMAGE_NAME="${IMAGE_NAME_PREFIX}-${ARM_VERSION}-rpi${RPI_MODEL}_v${SHORT_SHA}_${BUILD_DATE}.img"
 
 # Flags
@@ -483,24 +482,31 @@ configure_hostname() {
     log_success "Hostname configured"
 }
 
-configure_root_password() {
-    log_info "Configuring root password..."
+configure_accounts() {
+    log_info "Locking the shipped accounts..."
 
-    arch-chroot "$MOUNT_DIR" /bin/bash -c "echo root:$ROOT_PASSWORD | chpasswd"
+    # No password goes into the image. Whatever is written to /etc/shadow here
+    # ships inside a downloadable image, so the hash is public and can be
+    # attacked offline indefinitely -- and every card flashed from the image
+    # would share it. set-root-password-from-boot supplies one per card
+    # instead, after flashing. Until then the SSH key is the way in.
+    arch-chroot "$MOUNT_DIR" passwd --lock root
 
-    # The Arch Linux ARM tarball ships an alarm account whose password is
-    # alarm, documented on their download page. Nothing here uses it, and
-    # leaving it as it arrives puts a published credential on every card.
+    # The Arch Linux ARM tarball ships alarm/alarm, and the password is on
+    # their download page. Nothing here uses the account, and leaving it as it
+    # arrives puts a documented credential on a published image.
     if arch-chroot "$MOUNT_DIR" id alarm &>/dev/null; then
         arch-chroot "$MOUNT_DIR" passwd --lock alarm
         log_info "Locked the alarm account the base tarball ships"
     fi
 
-    # Save password to file
-    echo "$ROOT_PASSWORD" > "$OUTPUT_DIR/root_password.txt"
-    chmod 600 "$OUTPUT_DIR/root_password.txt"
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/set-root-password-from-boot" \
+        "$MOUNT_DIR/usr/local/bin/set-root-password-from-boot"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/set-root-password-from-boot.service" \
+        "$MOUNT_DIR/etc/systemd/system/set-root-password-from-boot.service"
+    arch-chroot "$MOUNT_DIR" systemctl enable set-root-password-from-boot.service
 
-    log_success "Root password configured and saved to root_password.txt"
+    log_success "Accounts locked; write a password to rootpw on the boot partition to set one"
 }
 
 configure_networking() {
@@ -960,7 +966,7 @@ main() {
     configure_locales
     configure_timezone
     configure_hostname
-    configure_root_password
+    configure_accounts
     configure_networking
     configure_rootfs_expansion
     configure_wifi
@@ -985,8 +991,9 @@ main() {
     log_success "Build completed successfully!"
     log_success "=========================================="
     log_success "Image: $OUTPUT_DIR/$IMAGE_NAME.zst"
-    log_success "Root password: $ROOT_PASSWORD"
-    log_success "Password saved to: $OUTPUT_DIR/root_password.txt"
+    log_success "Root and alarm are locked and no password ships in the image."
+    log_success "Log in with your SSH key, or write one line to rootpw on the"
+    log_success "boot partition of the card to set a console password."
     log_success "=========================================="
 }
 

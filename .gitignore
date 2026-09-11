@@ -5,5 +5,4 @@ upload_iso_to_r2.sh
 # Build artifacts
 *.img
 *.img.zst
-root_password.txt
 rpi-build.*/
