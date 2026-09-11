@@ -123,15 +123,15 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 ### System Settings
 - **Hostname**: `sz-<commit>-rpi<model>` (e.g., `sz-f471ba3-rpi5`)
 - **Default User**: `root`
-- **Root Password**: Generated randomly during build (saved in workflow artifacts)
+- **Root Password**: whatever the `ROOT_PASSWORD` repository secret is set to
 - **Locale**: `en_US.UTF-8`
 - **Keymap**: `us-acentos`
-- **Timezone**: UTC (default, can be changed)
+- **Timezone**: chosen when the workflow is run (defaults to `America/Los_Angeles`)
 
 ### Network Configuration
 - **Wired**: DHCP enabled on all Ethernet interfaces
 - **WiFi**: Optional (configure via environment variables)
-- **SSH Port**: `34522` (not standard 22)
+- **SSH Port**: `22` (set `SSH_PORT` to move it)
 - **SSH**: Root login with key authentication only
 - **Root filesystem**: expands to fill the card on first boot
 
@@ -157,8 +157,8 @@ env:
     base base-devel git neovim ...
   OS_DEFAULT_LOCALE: en_US.UTF-8   # System locale
   OS_KEYMAP: us-acentos            # Console keymap
-  OS_TIMEZONE: UTC                 # System timezone
-  SSH_PUB_KEY_URL: https://github.com/username.keys  # SSH public keys
+  OS_TIMEZONE: America/Los_Angeles # System timezone (a workflow input)
+  SSH_PUB_KEY_URLS: https://github.com/username.keys  # SSH public keys
 ```
 
 ### Adding WiFi Credentials
@@ -209,9 +209,9 @@ Set repository secret:
    systemctl status sshd
    ```
 
-2. Remember custom port:
+2. If `SSH_PORT` was changed at build time, name it:
    ```bash
-   ssh -p 34522 root@<pi-ip-address>
+   ssh -p <port> root@<pi-ip-address>
    ```
 
 ### WiFi Not Connecting

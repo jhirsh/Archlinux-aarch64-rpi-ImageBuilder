@@ -49,7 +49,11 @@ fr_FR@euro ISO-8859-15}"
 # convenience. Unset means no key authentication, which the build already warns
 # about further down.
 SSH_PUB_KEY_URLS="${SSH_PUB_KEY_URLS:-}"
-SSH_PORT="${SSH_PORT:-34522}"
+# Upstream put sshd on a high port to keep scanner noise out of the journal.
+# That is a reasonable trade on a public host and a bad one on a Pi on a home
+# network, where the cost is remembering -p 34522 on every command for the
+# life of the machine. Set SSH_PORT to move it back.
+SSH_PORT="${SSH_PORT:-22}"
 WIFI_SSID="${WIFI_SSID:-}"
 WIFI_PASSWORD="${WIFI_PASSWORD:-}"
 ZT_NETWORK_ID="${ZT_NETWORK_ID:-}"

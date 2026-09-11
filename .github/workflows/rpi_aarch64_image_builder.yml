@@ -11,6 +11,11 @@ on:
         options:
           - '4'
           - '5'
+      os_timezone:
+        description: 'Timezone (an /usr/share/zoneinfo name, e.g. America/Los_Angeles)'
+        required: false
+        default: 'America/Los_Angeles'
+        type: string
       upload_to_s3:
         description: 'Upload to S3'
         required: false
@@ -26,7 +31,9 @@ permissions:
 env:
   RPI_MODEL: ${{ inputs.rpi_model || '5' }}
   IMAGE_NAME_PREFIX: archlinux-rpi
-  OS_TIMEZONE: Europe/Paris
+  # The Pi has no clock and the runner is always UTC, so nothing can detect
+  # where the card is going to be used. Whoever starts the build says.
+  OS_TIMEZONE: ${{ inputs.os_timezone || 'America/Los_Angeles' }}
   # Whoever is listed here gets root over SSH on every machine flashed with
   # the result. Upstream lists its own maintainers; a fork that leaves that
   # alone is handing root on its Pi to two strangers.
@@ -137,7 +144,7 @@ jobs:
           gh release view "$tag" >/dev/null 2>&1 ||
             gh release create "$tag" \
               --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
-              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 34522; the console password is the one set in the ROOT_PASSWORD secret. The root filesystem expands to fill the card on first boot."
+              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 22; the console password is the one set in the ROOT_PASSWORD secret. The root filesystem expands to fill the card on first boot."
           gh release upload "$tag" "$IMAGE_FILE" --clobber
           echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 
