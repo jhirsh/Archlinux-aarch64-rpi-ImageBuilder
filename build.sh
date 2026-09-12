@@ -909,10 +909,27 @@ strip_machine_identity() {
     log_success "Machine identity stripped"
 }
 
+# Compression is the longest step of the build, and most of what it was
+# chewing on was not the system at all: the pacman cache, which is already
+# zstd and so incompressible, and the free space, which is not zero but the
+# leftovers of every file removed or upgraded along the way. Delete the one
+# and trim the other before the filesystems come down. Discarded blocks
+# become holes in the image file, and holes read as zeros.
+shed_dead_weight() {
+    log_info "Dropping the package cache and trimming free space..."
+
+    rm -rf "$MOUNT_DIR"/var/cache/pacman/pkg/*
+    fstrim -v "$MOUNT_DIR" || log_warn "fstrim failed; the image will compress worse, not wrong"
+
+    log_success "Dead weight shed"
+}
+
 compress_image() {
     log_info "Compressing image with zstd..."
 
-    zstd -T0 -19 -f "$OUTPUT_DIR/$IMAGE_NAME" -o "$OUTPUT_DIR/$IMAGE_NAME.zst" || \
+    # -12 with a long window, not -19: on the runner's four cores -19 ran at
+    # about 10 MB/s for a few percent of size. Zeros are free at any level.
+    zstd -T0 -12 --long=27 -f "$OUTPUT_DIR/$IMAGE_NAME" -o "$OUTPUT_DIR/$IMAGE_NAME.zst" || \
         die "Failed to compress image"
 
     log_success "Image compressed: $OUTPUT_DIR/$IMAGE_NAME.zst"
@@ -1053,6 +1070,7 @@ main() {
     configure_usb_gadget
     update_system
     strip_machine_identity
+    shed_dead_weight
 
     log_info "Unmounting filesystems..."
     sync
