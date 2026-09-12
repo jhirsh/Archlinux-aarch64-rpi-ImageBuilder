@@ -438,7 +438,13 @@ configure_initramfs() {
     grep -qE '^HOOKS=.*autodetect' "$MOUNT_DIR/etc/mkinitcpio.conf" &&
         die "autodetect is still in the HOOKS line of /etc/mkinitcpio.conf"
 
-    log_success "autodetect removed from the mkinitcpio hooks"
+    # Ships inside the initramfs too: mkinitcpio copies /etc/modprobe.d, and
+    # the keyboard hook loads hid_apple there, so this has to exist before
+    # install_kernel builds the image.
+    install -Dm644 "$SCRIPT_DIR/src/etc/modprobe.d/hid_apple.conf" \
+        "$MOUNT_DIR/etc/modprobe.d/hid_apple.conf"
+
+    log_success "autodetect removed from the mkinitcpio hooks; Apple keyboards get real F-keys"
 }
 
 install_kernel() {
