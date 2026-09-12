@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Join a WiFi network on first boot, from a file on the boot partition.
+#
+# A Pi with no Ethernet cable is unreachable until someone has typed a WiFi
+# passphrase at its console, which defeats a headless first boot. So the
+# credentials go on the card the same way the SSH key does. Write two lines
+# to a file called wifi at the top of the boot partition: the network name,
+# then the passphrase. ./provision.sh in the repository writes it for you.
+#
+#     printf '%s\n%s\n' 'Network name' 'the passphrase' > /Volumes/RPI64-BOOT/wifi
+#
+# This writes the network in iwd's own format, so iwd joins it and keeps
+# rejoining on its own, then deletes the file. As with rootpw, the passphrase
+# sits on the card in the clear until the boot that consumes it.
+
+set -euo pipefail
+
+WIFI_FILE="${WIFI_FILE:-/boot/wifi}"
+IWD_DIR="${IWD_DIR:-/var/lib/iwd}"
+
+log() { echo "join-wifi-from-boot: $*"; }
+
+if [[ ! -f $WIFI_FILE ]]; then
+  log "no $WIFI_FILE; no WiFi network to join"
+  exit 0
+fi
+
+ssid="" passphrase=""
+{ IFS= read -r ssid || true; IFS= read -r passphrase || true; } < <(tr -d '\r' <"$WIFI_FILE")
+
+if [[ -z $ssid || -z $passphrase ]]; then
+  log "$WIFI_FILE needs the network name on line 1 and the passphrase on line 2; nothing joined"
+  rm -f "$WIFI_FILE"
+  exit 0
+fi
+
+# iwd names the file after the SSID when it is plain, and =<hex of the SSID>
+# otherwise. See iwd.network(5).
+if [[ $ssid =~ ^[A-Za-z0-9_\ -]+$ ]]; then
+  name=$ssid
+else
+  name="=$(printf '%s' "$ssid" | od -An -tx1 | tr -d ' \n')"
+fi
+
+install -d -m 700 "$IWD_DIR"
+(
+  umask 077
+  printf '[Security]\nPassphrase=%s\n\n[Settings]\nAutoConnect=true\n' "$passphrase" >"$IWD_DIR/$name.psk"
+)
+
+rm -f "$WIFI_FILE"
+sync
+
+log "will join '$ssid'; $WIFI_FILE has been deleted"

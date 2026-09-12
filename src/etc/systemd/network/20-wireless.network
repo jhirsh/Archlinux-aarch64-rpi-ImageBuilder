@@ -3,6 +3,7 @@ Type=wlan
 
 [Network]
 DHCP=yes
+MulticastDNS=yes
 DNSSEC=no
 
 [DHCPv4]

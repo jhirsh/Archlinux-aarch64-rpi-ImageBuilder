@@ -127,10 +127,14 @@ jobs:
           # -R every time: the checkout in this git-less container falls back
           # to a REST download with no .git, so gh cannot infer the repository.
           tag="rpi${RPI_MODEL}-latest"
-          gh release view -R "$GITHUB_REPOSITORY" "$tag" >/dev/null 2>&1 ||
+          notes="Flash the .img.zst with Raspberry Pi Imager, or pipe it through zstdcat to dd. The image contains no credentials at all, so provision the card before booting it: with the card still mounted, run ./provision.sh from this repository to write your SSH key and WiFi to its boot partition, or copy the files by hand (authorized_keys, wifi, rootpw). Root logs in over SSH by key on port 22, password authentication is off, and the Pi answers to <hostname>.local. The root filesystem expands to fill the card on first boot."
+          gh release edit -R "$GITHUB_REPOSITORY" "$tag" --notes "$notes" 2>/dev/null ||
             gh release create -R "$GITHUB_REPOSITORY" "$tag" \
-              --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" \
-              --notes "Flash the .img.zst directly with Raspberry Pi Imager, or unzstd it first for imagers that do not read zstd. Root logs in over SSH by key on port 22 and password authentication is off. The image contains no credentials at all, so provision the card before booting it: copy your public key to authorized_keys on its FAT boot partition for SSH, and/or write a password to rootpw there for a console login. The root filesystem expands to fill the card on first boot."
+              --title "Arch Linux ARM for Raspberry Pi $RPI_MODEL" --notes "$notes"
+          # A rolling tag holds one image. Drop whatever the last build left.
+          for old in $(gh release view -R "$GITHUB_REPOSITORY" "$tag" --json assets -q '.assets[].name'); do
+            gh release delete-asset -R "$GITHUB_REPOSITORY" "$tag" "$old" -y
+          done
           gh release upload -R "$GITHUB_REPOSITORY" "$tag" "$IMAGE_FILE" --clobber
           echo "Flashable image: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$tag/$IMAGE_NAME"
 

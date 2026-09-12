@@ -1,0 +1,20 @@
+[Unit]
+Description=Join a WiFi network from the boot partition
+# Only when there is something to read. Dropping the file on the card later
+# and rebooting works exactly the same way as doing it before the first boot.
+ConditionPathExists=/boot/wifi
+# /boot is a separate FAT32 partition mounted from fstab, so the file is not
+# there yet when early boot runs.
+RequiresMountsFor=/boot
+# So the network is on disk before iwd looks for one.
+Before=iwd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/join-wifi-from-boot
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

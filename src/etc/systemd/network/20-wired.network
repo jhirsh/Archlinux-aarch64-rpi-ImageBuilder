@@ -3,6 +3,7 @@ Name=end0 eth0 en*
 
 [Network]
 DHCP=yes
+MulticastDNS=yes
 DNSSEC=no
 
 [DHCPv4]
