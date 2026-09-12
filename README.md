@@ -38,72 +38,76 @@ brew install act
 
 **Note**: Local builds require a VM (not LXC containers) and privileged access for loop device manipulation.
 
-### Writing Image to SD Card or USB
+### Writing the image to a card
 
-#### macOS
+The download is a `.img.zst`. Nothing needs to unpack it first.
+
+**Raspberry Pi Imager** (macOS, Windows, Linux): choose *Use custom*, pick the
+`.img.zst`, pick the card, write. Skip its OS customisation screen; the card is
+provisioned differently, see below.
+
+**From a terminal**, stream it straight to the device. On macOS, with the card
+at `/dev/disk4` (check `diskutil list`):
 
 ```bash
-# Extract the compressed image
-cd /tmp
-unzstd archlinux-rpi-aarch64-*.img.zst
-
-# Identify your SD card/USB device
-diskutil list
-
-# Unmount the device (replace disk4 with your device)
 sudo diskutil unmountDisk /dev/disk4
-
-# Write the image (use rdisk for faster writes)
-sudo dd if=/tmp/archlinux-rpi-aarch64-*.img of=/dev/rdisk4 bs=4m status=progress
-
-# Eject when complete
-sudo diskutil eject /dev/disk4
+zstdcat archlinux-rpi-aarch64-*.img.zst | sudo dd of=/dev/rdisk4 bs=4m status=progress
 ```
 
-#### Linux
+On Linux, with the card at `/dev/sdX` (check `lsblk`):
 
 ```bash
-# Extract the compressed image
-unzstd archlinux-rpi-aarch64-*.img.zst
-
-# Identify your device
-lsblk
-
-# Write the image (replace sdX with your device)
-sudo dd if=archlinux-rpi-aarch64-*.img of=/dev/sdX bs=4M status=progress conv=fsync
-
-# Sync and eject
-sync
-sudo eject /dev/sdX
+zstdcat archlinux-rpi-aarch64-*.img.zst | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
 ```
+
+balenaEtcher does not read zstd; use one of the above instead.
 
 ### Provisioning the card
 
 **The image contains no credentials at all, so a card flashed and booted with
 nothing added is not reachable.** That is deliberate: the image is published,
-and anything baked into it — a password hash, an SSH key — would be shared by
-everyone who flashes it, granting access to whoever ran the build. Upstream's
-images authorize their maintainers for exactly this reason.
+and anything baked into it — a password hash, an SSH key, a WiFi passphrase —
+would be shared by everyone who flashes it, granting access to whoever ran the
+build. Upstream's images authorize their maintainers for exactly this reason.
 
-Instead you provision your own card. The boot partition is FAT32, so it mounts
-as an ordinary volume as soon as the card is written. Add either or both:
+Instead you provision your own card, before its first boot. The boot partition
+is FAT32, so it mounts as an ordinary volume as soon as the card is written.
+With the card still in your machine:
 
 ```bash
-# SSH access for your key — the normal way in
-cp ~/.ssh/id_ed25519.pub /Volumes/RPI64-BOOT/authorized_keys
-
-# A console / USB-serial password — the way in when the network is not up
-echo 'the password you want' > /Volumes/RPI64-BOOT/rootpw
+./provision.sh -w 'Your WiFi name'
 ```
 
-On the next boot the Pi installs the key and sets root's password. The
-password file is deleted once used; the key file is not, since a public key is
-not a secret. Adding either later and rebooting works the same way, so a card
-is never permanently locked — you can always take it back to your machine.
+That copies your public key to the card, prompts for the WiFi passphrase, and
+ejects. Boot the Pi, wait a minute, and:
 
-Two details worth knowing. The key is only seeded when root has none, so a key
-you add later with `ssh-copy-id` survives a reboot. And the password sits on
-the card in the clear until the boot that consumes it.
+```bash
+ssh root@archlinux-<sha>-rpi5.local
+```
+
+The `<sha>` is the short commit in the image's file name. Leave off `-w` when
+the Pi is on Ethernet. Add `-p` to also set a root password for the HDMI or
+USB-serial console; without it root has no password and SSH by key is the only
+way in, which is the intended state. `-k` names the key when `~/.ssh` holds
+more than one.
+
+The script only writes files; you can write them by hand instead:
+
+| File on the boot partition | Contents | After first boot |
+|---|---|---|
+| `authorized_keys` | your public key(s) | kept; a public key is not a secret |
+| `wifi` | network name on line 1, passphrase on line 2 | deleted |
+| `rootpw` | the password, one line | deleted |
+
+Adding any of them later and rebooting works the same way, so a card is never
+permanently locked — you can always take it back to your machine. The key is
+only seeded when root has none, so a key you add later with `ssh-copy-id`
+survives a reboot. The passphrase and password sit on the card in the clear
+until the boot that consumes them.
+
+The image creates no desktop user: only `root` and the locked `alarm` exist,
+and there is no wheel sudoers rule. Omarchy's `install.sh`, run as root, is
+what creates the user, its sudo access and its password.
 
 ## USB Serial Console Access
 
@@ -157,7 +161,8 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 
 ### Network Configuration
 - **Wired**: DHCP enabled on all Ethernet interfaces
-- **WiFi**: Optional (configure via environment variables)
+- **WiFi**: iwd, joined from the `wifi` file on the boot partition or with `iwctl`
+- **mDNS**: the Pi answers to `<hostname>.local`
 - **SSH Port**: `22` (set `SSH_PORT` to move it)
 - **SSH**: key authentication only — `PasswordAuthentication no` for every account
 - **Accounts**: `root` and the base tarball's `alarm` both ship locked

@@ -561,6 +561,11 @@ configure_networking() {
         log_warn "Wireless network config not found, skipping"
     fi
 
+    # mDNS, so the Pi answers to <hostname>.local with no DNS setup. The
+    # .network files opt each link in; resolved answers.
+    arch-chroot "$MOUNT_DIR" systemctl enable systemd-networkd systemd-resolved
+    ln -sf ../run/systemd/resolve/stub-resolv.conf "$MOUNT_DIR/etc/resolv.conf"
+
     log_success "Networking configured"
 }
 
@@ -585,6 +590,16 @@ configure_rootfs_expansion() {
 }
 
 configure_wifi() {
+    # iwd is always on, so a card can join a network from a file on its boot
+    # partition (join-wifi-from-boot) or from iwctl at the console, with no
+    # credential in the published image.
+    arch-chroot "$MOUNT_DIR" systemctl enable iwd
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/join-wifi-from-boot" \
+        "$MOUNT_DIR/usr/local/bin/join-wifi-from-boot"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/join-wifi-from-boot.service" \
+        "$MOUNT_DIR/etc/systemd/system/join-wifi-from-boot.service"
+    arch-chroot "$MOUNT_DIR" systemctl enable join-wifi-from-boot.service
+
     if [[ -n "$WIFI_SSID" ]] && [[ -n "$WIFI_PASSWORD" ]]; then
         log_info "Configuring WiFi for SSID: $WIFI_SSID..."
 
@@ -597,11 +612,9 @@ PreSharedKey=$WIFI_PASSWORD
 AutoConnect=true
 EOF
 
-        arch-chroot "$MOUNT_DIR" systemctl enable iwd
-
         log_success "WiFi configured"
     else
-        log_info "WiFi configuration skipped (no credentials provided)"
+        log_info "No WiFi baked in; a card joins from its own wifi file on first boot"
     fi
 }
 
