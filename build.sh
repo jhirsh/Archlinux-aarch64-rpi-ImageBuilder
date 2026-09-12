@@ -432,9 +432,11 @@ configure_initramfs() {
     # controller, and the Pi booted to a blank screen. Without autodetect the
     # kms/block/filesystems hooks include everything they know about, which
     # is the only correct answer when the build host is not the target.
-    sed -i 's/autodetect //' "$MOUNT_DIR/etc/mkinitcpio.conf"
-    grep -q 'autodetect' "$MOUNT_DIR/etc/mkinitcpio.conf" &&
-        die "autodetect is still in /etc/mkinitcpio.conf"
+    # Only the live HOOKS line: the stock file mentions autodetect in four
+    # comments too, which is what tripped the first version of this guard.
+    sed -i '/^HOOKS=/s/autodetect //' "$MOUNT_DIR/etc/mkinitcpio.conf"
+    grep -qE '^HOOKS=.*autodetect' "$MOUNT_DIR/etc/mkinitcpio.conf" &&
+        die "autodetect is still in the HOOKS line of /etc/mkinitcpio.conf"
 
     log_success "autodetect removed from the mkinitcpio hooks"
 }
