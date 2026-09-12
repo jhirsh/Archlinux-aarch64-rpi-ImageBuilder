@@ -88,8 +88,9 @@ ssh root@archlinux-<sha>-rpi5.local
 The `<sha>` is the short commit in the image's file name. Leave off `-w` when
 the Pi is on Ethernet. Add `-p` to also set a root password for the HDMI or
 USB-serial console; without it root has no password and SSH by key is the only
-way in, which is the intended state. `-k` names the key when `~/.ssh` holds
-more than one.
+way in, which is the intended state. Add `-u NAME` for an ordinary user in
+`wheel` with sudo and the same key, which is what a desktop install wants.
+`-k` names the key when `~/.ssh` holds more than one.
 
 The script only writes files; you can write them by hand instead:
 
@@ -97,6 +98,7 @@ The script only writes files; you can write them by hand instead:
 |---|---|---|
 | `authorized_keys` | your public key(s) | kept; a public key is not a secret |
 | `wifi` | network name on line 1, passphrase on line 2 | deleted |
+| `userconf` | `name:password`, one line; a sudo user with the same keys | deleted |
 | `rootpw` | the password, one line | deleted |
 
 Adding any of them later and rebooting works the same way, so a card is never
@@ -105,9 +107,9 @@ only seeded when root has none, so a key you add later with `ssh-copy-id`
 survives a reboot. The passphrase and password sit on the card in the clear
 until the boot that consumes them.
 
-The image creates no desktop user: only `root` and the locked `alarm` exist,
-and there is no wheel sudoers rule. Omarchy's `install.sh`, run as root, is
-what creates the user, its sudo access and its password.
+Without `userconf` the image has no ordinary user: only `root` and the locked
+`alarm` exist, and there is no wheel sudoers rule. An installer that insists on
+being run as a normal user needs one created first, by `-u` or by hand.
 
 ## USB Serial Console Access
 

@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# Create a sudo user on first boot, from a file on the boot partition.
+#
+# root over SSH is enough for a server, but a desktop install wants an
+# ordinary user with sudo, and creating one at the console defeats a
+# headless first boot. So, like rootpw, the user comes from the card. Write
+# one line, name:password, to a file called userconf at the top of the boot
+# partition. ./provision.sh -u NAME writes it for you.
+#
+# The user joins wheel, wheel gets sudo, and any authorized_keys on the boot
+# partition are installed for the user too, so ssh NAME@host works. The file
+# is deleted once used.
+
+set -euo pipefail
+
+USERCONF_FILE="${USERCONF_FILE:-/boot/userconf}"
+KEYS_SOURCE="${AUTHORIZED_KEYS_SOURCE:-/boot/authorized_keys}"
+SUDOERS_FILE="${SUDOERS_FILE:-/etc/sudoers.d/wheel}"
+
+log() { echo "create-user-from-boot: $*"; }
+
+if [[ ! -f $USERCONF_FILE ]]; then
+  log "no $USERCONF_FILE; no user to create"
+  exit 0
+fi
+
+line=$(head -1 "$USERCONF_FILE" | tr -d '\r\n')
+name=${line%%:*}
+password=${line#*:}
+
+if [[ -z $name || $line != *:* || -z $password ]]; then
+  log "$USERCONF_FILE must be one line, name:password; no user created"
+  rm -f "$USERCONF_FILE"
+  exit 0
+fi
+
+if id "$name" &>/dev/null; then
+  log "user $name already exists; leaving it alone"
+else
+  useradd --create-home --groups wheel --shell /bin/bash "$name"
+  log "created user $name"
+fi
+
+# Through stdin, so the password is never an argument in the process list.
+printf '%s:%s\n' "$name" "$password" | chpasswd
+
+printf '%%wheel ALL=(ALL:ALL) ALL\n' >"$SUDOERS_FILE"
+chmod 440 "$SUDOERS_FILE"
+
+if [[ -s $KEYS_SOURCE ]]; then
+  home=$(getent passwd "$name" | cut -d: -f6)
+  install -d -m 700 "$home/.ssh"
+  tr -d '\r' <"$KEYS_SOURCE" >"$home/.ssh/authorized_keys"
+  chmod 600 "$home/.ssh/authorized_keys"
+  chown -R "$name:$name" "$home/.ssh"
+  log "installed authorized_keys for $name"
+fi
+
+rm -f "$USERCONF_FILE"
+sync
+
+log "$name is in wheel with sudo; $USERCONF_FILE has been deleted"

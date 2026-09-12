@@ -21,17 +21,19 @@ usage: $0 [-k PUBKEY] [-w SSID] [-p] [VOLUME]
 
   -k PUBKEY   public key that may log in as root (default: the only ~/.ssh/*.pub)
   -w SSID     WiFi network to join on first boot; the passphrase is prompted for
+  -u NAME     also create a sudo user NAME with the same key; its password is prompted for
   -p          also set a root password for the console; prompted for
   VOLUME      the card's boot partition (default: /Volumes/RPI64-BOOT)
 USAGE
   exit 2
 }
 
-pubkey="" ssid="" want_rootpw=""
-while getopts 'k:w:ph' opt; do
+pubkey="" ssid="" username="" want_rootpw=""
+while getopts 'k:w:u:ph' opt; do
   case $opt in
     k) pubkey=$OPTARG ;;
     w) ssid=$OPTARG ;;
+    u) username=$OPTARG ;;
     p) want_rootpw=1 ;;
     *) usage ;;
   esac
@@ -55,6 +57,12 @@ if [[ -n $ssid ]]; then
   IFS= read -rsp "passphrase for '$ssid': " pass; echo
   printf '%s\n%s\n' "$ssid" "$pass" >"$volume/wifi"
   echo "wifi             <- '$ssid' (deleted by the Pi on first boot)"
+fi
+
+if [[ -n $username ]]; then
+  IFS= read -rsp "password for user '$username': " upw; echo
+  printf '%s:%s\n' "$username" "$upw" >"$volume/userconf"
+  echo "userconf         <- '$username' in wheel, with sudo (deleted by the Pi on first boot)"
 fi
 
 if [[ -n $want_rootpw ]]; then

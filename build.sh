@@ -537,6 +537,12 @@ configure_accounts() {
         "$MOUNT_DIR/etc/systemd/system/install-authorized-keys-from-boot.service"
     arch-chroot "$MOUNT_DIR" systemctl enable install-authorized-keys-from-boot.service
 
+    install -Dm755 "$SCRIPT_DIR/src/usr/local/bin/create-user-from-boot" \
+        "$MOUNT_DIR/usr/local/bin/create-user-from-boot"
+    install -Dm644 "$SCRIPT_DIR/src/etc/systemd/system/create-user-from-boot.service" \
+        "$MOUNT_DIR/etc/systemd/system/create-user-from-boot.service"
+    arch-chroot "$MOUNT_DIR" systemctl enable create-user-from-boot.service
+
     log_success "Accounts locked; write a password to rootpw on the boot partition to set one"
 }
 
