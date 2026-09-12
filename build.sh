@@ -572,6 +572,12 @@ configure_networking() {
     arch-chroot "$MOUNT_DIR" systemctl enable systemd-networkd systemd-resolved
     ln -sf ../run/systemd/resolve/stub-resolv.conf "$MOUNT_DIR/etc/resolv.conf"
 
+    # The login prompt says the address too, so a monitor or the USB-serial
+    # cable finds the Pi when the name does not. agetty fills in \4 with the
+    # first configured interface; press Enter if it printed before DHCP was
+    # done.
+    printf 'Arch Linux ARM \\r (\\l)\n\nIPv4: \\4\n\n' > "$MOUNT_DIR/etc/issue"
+
     log_success "Networking configured"
 }
 
