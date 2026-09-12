@@ -85,7 +85,19 @@ ejects. Boot the Pi, wait a minute, and:
 ssh root@archlinux-<sha>-rpi5.local
 ```
 
-The `<sha>` is the short commit in the image's file name. Leave off `-w` when
+The `<sha>` is the short commit in the image's file name. If the name does not
+resolve, the address changes between boots but the MAC does not, so find the
+Pi by that:
+
+```bash
+./find-pi.sh
+```
+
+It pings the subnet and prints an `ssh` line for every Raspberry Pi that
+answers. The HDMI and USB-serial login prompts print the address too. This is
+for the first boot or two; once in, give the Pi a name that outlives its
+address with a DHCP reservation on the router or `tailscale up`.
+Leave off `-w` when
 the Pi is on Ethernet. Add `-p` to also set a root password for the HDMI or
 USB-serial console; without it root has no password and SSH by key is the only
 way in, which is the intended state. Add `-u NAME` for an ordinary user in
@@ -164,7 +176,7 @@ Run `usb-console-info` or `usb-info` on the Pi for detailed connection informati
 ### Network Configuration
 - **Wired**: DHCP enabled on all Ethernet interfaces
 - **WiFi**: iwd, joined from the `wifi` file on the boot partition or with `iwctl`
-- **mDNS**: the Pi answers to `<hostname>.local`
+- **mDNS**: the Pi answers to `<hostname>.local`; `./find-pi.sh` finds it by MAC when that fails
 - **SSH Port**: `22` (set `SSH_PORT` to move it)
 - **SSH**: key authentication only — `PasswordAuthentication no` for every account
 - **Accounts**: `root` and the base tarball's `alarm` both ship locked

@@ -11,6 +11,7 @@
 #     ./provision.sh -w 'Home Net'
 #
 # Then boot the Pi and: ssh root@archlinux-<sha>-rpi5.local
+# If the name does not resolve, ./find-pi.sh prints the address instead.
 
 set -euo pipefail
 shopt -s nullglob
@@ -77,3 +78,4 @@ if command -v diskutil >/dev/null; then
 else
   echo "now unmount $volume and boot the Pi"
 fi
+echo "then: ssh root@<hostname>.local, or ./find-pi.sh if the name does not resolve"
